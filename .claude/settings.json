@@ -1,0 +1,46 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "EditTool|WriteTool",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'if [[ \"$file_path\" =~ \\.(env|credentials|api_keys|secrets|config\\.json)$ ]]; then echo \"⚠️ 敏感文件保護:阻止修改機密文件\" && exit 1; fi'"
+          }
+        ]
+      },
+      {
+        "matcher": "BashTool",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"$(date): 命令執行 - $command\" >> .command_audit.log"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "EditTool|WriteTool",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'case \"$file_path\" in *.py) black \"$file_path\" 2>/dev/null && echo \"✓ Formatted $file_path\" || echo \"⚠️ Black formatting failed for $file_path\" ;; *.js|*.ts|*.jsx|*.tsx) prettier --write \"$file_path\" 2>/dev/null && echo \"✓ Formatted $file_path\" || echo \"⚠️ Prettier formatting failed for $file_path\" ;; *.go) gofmt -w \"$file_path\" 2>/dev/null && echo \"✓ Formatted $file_path\" || echo \"⚠️ gofmt formatting failed for $file_path\" ;; esac'"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/scheduler/quality_check.py 2>/dev/null || echo \"⚠️ Quality check script not found or failed\""
+          }
+        ]
+      }
+    ]
+  }
+}
