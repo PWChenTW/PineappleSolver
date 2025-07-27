@@ -8,8 +8,7 @@ This script demonstrates how to use the solver in different scenarios.
 import sys
 sys.path.append('.')
 
-from src.core.domain import GameState, Card
-from src.core.domain.game_state import Street
+from src.core.domain import GameState, Card, Street
 from src.ofc_solver import create_solver
 
 

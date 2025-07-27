@@ -1,133 +1,128 @@
-# 通用AI協作開發模板
+# PineappleSolver - OFC AI 求解器
 
-🎯 **一個完整的AI協作開發環境，適用於各種類型的軟件項目**
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+專為 Open Face Chinese Poker (OFC) / 大菠蘿撲克開發的 AI 求解器，使用 Monte Carlo Tree Search (MCTS) 算法實現。
+
+## 🎯 專案特色
+
+- **高性能**: 6500+ 模擬/秒，5分鐘內完成求解
+- **智能算法**: MCTS with UCB selection + 領域特定優化
+- **並行計算**: 多線程支持，充分利用多核心 CPU
+- **完整分析**: 期望值計算、犯規風險評估、獎勵分預測
+- **易於使用**: 簡潔的 Python API
 
 ## 🚀 快速開始
 
+### 安裝
 ```bash
-# 測試環境
-./test_setup.sh
-
-# 開始使用
-claude-code
-> /spec-init "我的第一個功能" "用戶註冊和登錄系統"
+git clone git@github.com:PWChenTW/PineappleSolver.git
+cd PineappleSolver
+pip install numpy  # 唯一依賴
 ```
 
-## 📋 核心特色
+### 基本使用
+```python
+from src.ofc_solver import create_solver
+from src.core.domain import GameState
 
-### 🤖 **整合式開發方法論**
-- **SDD** (規格驅動) 作為主框架
-- **BDD** (行為驅動) 處理需求
-- **DDD** (領域驅動) 處理設計
-- **TDD** (測試驅動) 確保品質
+# 創建求解器
+solver = create_solver(time_limit=30.0, num_threads=4)
 
-### 👥 **5個專業Sub Agents**
-- `business-analyst` - 業務分析師
-- `architect` - 系統架構師
-- `data-specialist` - 數據專家
-- `integration-specialist` - 集成專家
-- `test-engineer` - 測試工程師
+# 求解完整遊戲
+game = GameState(num_players=2, player_index=0)
+results = solver.solve_game(game)
+```
 
-### ⚡ **自動化Hooks**
-- 代碼格式化
-- 敏感文件保護
-- 命令執行審計
-- 品質自動檢查
-
-### 🔄 **多實例協作**
-- 角色分工明確
-- 任務自動調度
-- Git分支策略
-- 進度實時追蹤
-
-## 📖 使用指南
-
-### 標準SDD流程
+### 運行範例
 ```bash
-# 1. 初始化功能規格
-> /spec-init [功能名稱] [描述]
+# 完整使用範例
+python example_usage.py
 
-# 2. BDD需求分析
-> /spec-requirements [功能名稱]
-
-# 3. DDD技術設計
-> /spec-design [功能名稱]
-
-# 4. 任務分解
-> /spec-tasks [功能名稱]
-
-# 5. 開始實施
-> 現在開始實施 [功能名稱]
+# 快速測試
+python test_solver.py
 ```
 
-### Sub Agents使用
-```bash
-# 顯式調用特定Agent
-> 使用 business-analyst 分析這個功能的用戶需求
-> 讓 architect 設計系統架構
-> 請 data-specialist 優化算法性能
-```
+## 📖 詳細文檔
 
-## 📊 監控工具
+- [快速開始指南](QUICK_START.md)
+- [專案進度追蹤](PROJECT_PROGRESS.md)
+- [執行計劃](EXECUTION_PLAN.md)
+- [OFC 遊戲規則](OFC_GAME_RULES.md)
 
-```bash
-# 查看命令執行統計
-python scripts/monitoring/view_command_audit.py
-
-# 查看項目進度
-python .claude/scheduler/spec_scheduler.py report
-
-# 檢查環境狀態
-./test_setup.sh
-```
-
-## 📁 項目結構
+## 🏗️ 專案結構
 
 ```
-├── AI_COLLABORATION_TEMPLATE.md    # 完整模板說明
-├── USAGE_GUIDE.md                 # 詳細使用指南
-├── CLAUDE.md                      # Claude Code配置
-├── setup.sh                       # 一鍵設置腳本
-├── test_setup.sh                  # 環境測試腳本
-├── .claude/
-│   ├── agents/                    # Sub Agents配置
-│   ├── commands/                  # Slash Commands
-│   ├── scheduler/                 # 任務調度器
-│   └── settings.json              # Hooks配置
-├── .kiro/
-│   ├── steering/                  # 項目知識庫
-│   └── specs/                     # 功能規格
-├── docs/                          # 文檔目錄
-├── src/                           # 源代碼
-├── tests/                         # 測試代碼
-└── scripts/                       # 工具腳本
+PineappleSolver/
+├── src/
+│   ├── core/
+│   │   ├── domain/          # 領域模型（Card, Hand, GameState）
+│   │   └── algorithms/      # 核心算法（MCTS, 評估器）
+│   └── ofc_solver.py       # 主要 API 介面
+├── tests/                  # 測試套件
+├── docs/                   # 技術文檔
+└── .kiro/specs/           # 規格文檔（SDD/BDD/DDD）
 ```
 
-## 🎯 適用場景
+## 🔧 核心組件
 
-✅ **Web應用開發**
-✅ **桌面軟件開發**
-✅ **遊戲項目**
-✅ **API服務**
-✅ **工具和庫**
-✅ **算法項目**
-✅ **數據處理**
+### 遊戲引擎
+- 完整的 OFC 規則實現
+- 牌型識別和比較
+- 犯規檢測和計分系統
 
-## 📚 深入了解
+### MCTS 搜索
+- 優化的搜索樹管理
+- 漸進式展開（Progressive Widening）
+- 虛擬損失（Virtual Loss）並行化
 
-- **[AI_COLLABORATION_TEMPLATE.md](AI_COLLABORATION_TEMPLATE.md)** - 完整模板框架
-- **[USAGE_GUIDE.md](USAGE_GUIDE.md)** - 詳細使用指南
-- **[CLAUDE.md](CLAUDE.md)** - Claude Code配置說明
+### 評估系統
+- 手牌強度評估
+- 獎勵分潛力計算
+- 犯規風險分析
 
-## 🆘 獲得幫助
+## 📊 性能指標
 
-1. 查看使用指南：`USAGE_GUIDE.md`
-2. 檢查配置文件：`CLAUDE.md`
-3. 運行環境測試：`./test_setup.sh`
-4. 查看日誌：`.claude/scheduler/logs/`
+- 單次牌型評估: < 1μs
+- MCTS 模擬速度: 6500+ sims/秒
+- 初始擺放求解: ~10 秒（65,000+ 模擬）
+- 完整遊戲求解: < 5 分鐘
+
+## 🛠️ 開發狀態
+
+- ✅ 核心功能完成（60%）
+- ✅ 基礎遊戲引擎
+- ✅ MCTS 搜索算法
+- ✅ 性能優化
+- 🔄 測試覆蓋（進行中）
+- ⏳ API 開發（計劃中）
+- ⏳ Docker 部署（計劃中）
+
+## 🤝 貢獻指南
+
+歡迎貢獻！請查看 [EXECUTION_PLAN.md](EXECUTION_PLAN.md) 了解當前的開發計劃。
+
+### 開發流程
+1. Fork 專案
+2. 創建功能分支 (`git checkout -b feature/amazing-feature`)
+3. 提交更改 (`git commit -m 'Add amazing feature'`)
+4. 推送分支 (`git push origin feature/amazing-feature`)
+5. 開啟 Pull Request
+
+## 📝 授權
+
+本專案採用 MIT 授權 - 詳見 [LICENSE](LICENSE) 文件
+
+## 🙏 致謝
+
+- 使用 Claude AI 協助開發
+- 參考了德州撲克 solver 的設計理念
+- 感謝 OFC 社群的規則說明
 
 ---
 
-🎉 **開始您的高效AI協作開發之旅！**
+**作者**: PWChenTW  
+**聯絡方式**: [GitHub](https://github.com/PWChenTW)
 
-這個模板適用於各種類型的軟件項目，從簡單的工具到複雜的企業應用，都能提供專業、高效、安全的AI協作開發環境。
+🤖 *Built with AI assistance from Claude*
