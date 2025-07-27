@@ -1,0 +1,38 @@
+{
+  "name": "ofc-solver",
+  "title": "OFC AI Solver",
+  "description": "能在5分鐘內求解OFC最優策略的AI系統",
+  "status": "implementation",
+  "created_at": "2025-01-27T10:00:00Z",
+  "updated_at": "2025-01-27T22:30:00Z",
+  "stages": {
+    "requirements": {
+      "status": "completed",
+      "completed_at": "2025-01-27T12:00:00Z",
+      "agent": "business-analyst"
+    },
+    "design": {
+      "status": "completed", 
+      "completed_at": "2025-01-27T14:00:00Z",
+      "agent": "architect"
+    },
+    "tasks": {
+      "status": "completed",
+      "completed_at": "2025-01-27T15:00:00Z",
+      "agent": "architect"
+    },
+    "implementation": {
+      "status": "in_progress",
+      "started_at": "2025-01-27T16:00:00Z",
+      "progress": 60,
+      "agents": ["data-specialist"]
+    }
+  },
+  "assigned_agents": [
+    "business-analyst",
+    "architect", 
+    "data-specialist"
+  ],
+  "tags": ["ai", "game", "solver", "mcts"],
+  "priority": "high"
+}
