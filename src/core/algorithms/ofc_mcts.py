@@ -162,7 +162,15 @@ class MCTSEngine:
             completed = 0
             while not self._should_stop(start_time):
                 # Wait for some simulations to complete
-                done, pending = as_completed(futures, timeout=0.1).__next__(), futures
+                done = []
+                pending = []
+                
+                # Check which futures are done
+                for future in futures:
+                    if future.done():
+                        done.append(future)
+                    else:
+                        pending.append(future)
                 
                 # Process completed simulations
                 for future in done:
@@ -172,10 +180,14 @@ class MCTSEngine:
                         
                         # Submit new simulation
                         new_future = executor.submit(self._run_simulation_with_virtual_loss, root)
-                        pending.add(new_future)
+                        pending.append(new_future)
                         
                     except Exception as e:
                         logger.error(f"Simulation error: {e}")
+                
+                # If no futures completed, wait a bit
+                if not done:
+                    time.sleep(0.01)
                 
                 futures = pending
                 
