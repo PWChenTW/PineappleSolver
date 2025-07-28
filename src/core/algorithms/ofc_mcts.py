@@ -60,6 +60,13 @@ class MCTSConfig:
     pw_threshold: int = 10
 
 
+@dataclass
+class MCTSResult:
+    """Result from MCTS search containing action and root node."""
+    best_action: Action
+    root_node: MCTSNode
+
+
 class MCTSEngine:
     """
     Monte Carlo Tree Search engine for OFC.
@@ -87,7 +94,7 @@ class MCTSEngine:
     
     def search(self, 
                initial_state: GameState,
-               progress_callback: Optional[Callable[[int, float], None]] = None) -> Action:
+               progress_callback: Optional[Callable[[int, float], None]] = None) -> MCTSResult:
         """
         Run MCTS search from initial state.
         
@@ -96,7 +103,7 @@ class MCTSEngine:
             progress_callback: Optional callback for progress updates
             
         Returns:
-            Best action found
+            MCTSResult containing best action and root node
         """
         logger.info(f"Starting MCTS search with config: {self.config}")
         
@@ -124,7 +131,7 @@ class MCTSEngine:
             for i, (action, visits, reward) in enumerate(stats[:5]):
                 logger.info(f"  {i+1}. Visits: {visits}, Avg reward: {reward:.3f}")
         
-        return best_action
+        return MCTSResult(best_action=best_action, root_node=root)
     
     def _sequential_search(self, 
                           root: MCTSNode,

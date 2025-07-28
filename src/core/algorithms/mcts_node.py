@@ -9,9 +9,13 @@ from typing import List, Optional, Dict, Tuple, Set
 from dataclasses import dataclass, field
 import math
 import numpy as np
+from itertools import combinations
+from collections import Counter
 
 from src.core.domain.game_state import GameState, Street
-from src.core.domain.card import Card
+from src.core.domain.card import Card, Rank
+from src.core.domain.hand import Hand
+from src.core.domain.hand_type import HandCategory
 
 
 @dataclass
@@ -129,7 +133,7 @@ class MCTSNode:
         """
         Generate actions for initial street (place all 5 cards).
         
-        For now, using a simplified approach - can be optimized later.
+        Uses intelligent strategies based on hand strength analysis.
         """
         # Get available positions
         positions = self.state.get_valid_placements()
@@ -137,28 +141,197 @@ class MCTSNode:
         if len(positions) < 5:
             return []  # Not enough positions
         
-        # For initial implementation, try a few reasonable distributions
-        # This is where domain knowledge helps reduce the search space
+        # Group positions by row
+        front_positions = [(pos, idx) for pos, idx in positions if pos == 'front']
+        middle_positions = [(pos, idx) for pos, idx in positions if pos == 'middle']
+        back_positions = [(pos, idx) for pos, idx in positions if pos == 'back']
+        
         actions = []
         
-        # Common patterns for initial placement:
-        # 1. 2 front, 2 middle, 1 back
-        # 2. 2 front, 1 middle, 2 back
-        # 3. 1 front, 2 middle, 2 back
+        # Analyze card strength
+        sorted_cards = sorted(cards, key=lambda c: c.rank_value, reverse=True)
         
-        # For now, just generate one simple action
-        # TODO: Implement smarter initial placement generation
-        if len(positions) >= 5:
-            action = Action([
-                (cards[0], positions[0][0], positions[0][1]),
-                (cards[1], positions[1][0], positions[1][1]),
-                (cards[2], positions[2][0], positions[2][1]),
-                (cards[3], positions[3][0], positions[3][1]),
-                (cards[4], positions[4][0], positions[4][1]),
-            ])
+        # Count pairs and suits
+        rank_counts = Counter(card.rank_value for card in cards if not card.is_joker)
+        suit_counts = Counter(card.suit_value for card in cards if not card.is_joker)
+        joker_count = sum(1 for card in cards if card.is_joker)
+        
+        # Identify pairs
+        pairs = [(rank, count) for rank, count in rank_counts.items() if count >= 2]
+        pairs.sort(key=lambda x: x[0], reverse=True)  # Sort by rank
+        
+        # Strategy 1: If we have a pair, consider placements that utilize it
+        if pairs:
+            highest_pair_rank = pairs[0][0]
+            pair_cards = [c for c in cards if c.rank_value == highest_pair_rank][:2]
+            other_cards = [c for c in cards if c not in pair_cards]
+            
+            # Option 1: Pair in back (strong position)
+            if len(back_positions) >= 2 and len(middle_positions) >= 2 and len(front_positions) >= 1:
+                action = self._create_placement_action(
+                    pair_cards, back_positions[:2],
+                    other_cards[:2], middle_positions[:2],
+                    other_cards[2:3], front_positions[:1]
+                )
+                actions.append(action)
+            
+            # Option 2: Pair in middle (balanced)
+            if len(middle_positions) >= 2 and len(back_positions) >= 2 and len(front_positions) >= 1:
+                # Put two highest non-pair cards in back
+                sorted_others = sorted(other_cards, key=lambda c: c.rank_value, reverse=True)
+                action = self._create_placement_action(
+                    sorted_others[:2], back_positions[:2],
+                    pair_cards, middle_positions[:2],
+                    sorted_others[2:3], front_positions[:1]
+                )
+                actions.append(action)
+            
+            # Option 3: Pair in front (aggressive, for high pairs)
+            if highest_pair_rank >= Rank.JACK.value and len(front_positions) >= 2:
+                if len(back_positions) >= 2 and len(middle_positions) >= 1:
+                    sorted_others = sorted(other_cards, key=lambda c: c.rank_value, reverse=True)
+                    action = self._create_placement_action(
+                        sorted_others[:2], back_positions[:2],
+                        sorted_others[2:3], middle_positions[:1],
+                        pair_cards, front_positions[:2]
+                    )
+                    actions.append(action)
+        
+        # Strategy 2: Flush draw potential
+        flush_potential = max(suit_counts.values()) if suit_counts else 0
+        if flush_potential + joker_count >= 3:
+            # Group cards by suit
+            flush_suit = max(suit_counts.items(), key=lambda x: x[1])[0]
+            flush_cards = [c for c in cards if not c.is_joker and c.suit_value == flush_suit]
+            jokers = [c for c in cards if c.is_joker]
+            other_cards = [c for c in cards if c not in flush_cards and c not in jokers]
+            
+            # Place flush cards together in back or middle
+            if len(flush_cards) + len(jokers) >= 3:
+                if len(back_positions) >= 3 and len(middle_positions) >= 1 and len(front_positions) >= 1:
+                    flush_group = (flush_cards + jokers)[:3]
+                    remaining = other_cards + (flush_cards + jokers)[3:]
+                    action = self._create_placement_action(
+                        flush_group, back_positions[:3],
+                        remaining[:1], middle_positions[:1],
+                        remaining[1:2], front_positions[:1]
+                    )
+                    actions.append(action)
+        
+        # Strategy 3: Straight potential
+        straight_potential = self._check_straight_potential(cards)
+        if straight_potential:
+            # Place connected cards together
+            connected_cards = self._get_connected_cards(cards)
+            if len(connected_cards) >= 3:
+                other_cards = [c for c in cards if c not in connected_cards]
+                if len(back_positions) >= 3 and len(middle_positions) >= 1 and len(front_positions) >= 1:
+                    action = self._create_placement_action(
+                        connected_cards[:3], back_positions[:3],
+                        other_cards[:1], middle_positions[:1],
+                        other_cards[1:2], front_positions[:1]
+                    )
+                    actions.append(action)
+        
+        # Strategy 4: Balanced distribution based on card strength
+        # This is the most common approach
+        if len(front_positions) >= 2 and len(middle_positions) >= 2 and len(back_positions) >= 1:
+            # Standard 2-2-1 distribution
+            action = self._create_placement_action(
+                sorted_cards[3:5], front_positions[:2],  # Lowest 2 in front
+                sorted_cards[1:3], middle_positions[:2],  # Middle 2 in middle
+                sorted_cards[0:1], back_positions[:1]     # Highest in back
+            )
             actions.append(action)
         
+        if len(front_positions) >= 2 and len(middle_positions) >= 1 and len(back_positions) >= 2:
+            # Alternative 2-1-2 distribution
+            action = self._create_placement_action(
+                sorted_cards[3:5], front_positions[:2],  # Lowest 2 in front
+                sorted_cards[2:3], middle_positions[:1],  # Middle 1 in middle
+                sorted_cards[0:2], back_positions[:2]     # Highest 2 in back
+            )
+            actions.append(action)
+        
+        if len(front_positions) >= 1 and len(middle_positions) >= 2 and len(back_positions) >= 2:
+            # Alternative 1-2-2 distribution
+            action = self._create_placement_action(
+                sorted_cards[4:5], front_positions[:1],  # Lowest 1 in front
+                sorted_cards[2:4], middle_positions[:2],  # Middle 2 in middle
+                sorted_cards[0:2], back_positions[:2]     # Highest 2 in back
+            )
+            actions.append(action)
+        
+        # If no specific strategies worked, fall back to simple placement
+        if not actions and len(positions) >= 5:
+            placements = []
+            for i in range(5):
+                if i < len(positions) and i < len(cards):
+                    placements.append((cards[i], positions[i][0], positions[i][1]))
+            if len(placements) == 5:
+                actions.append(Action(placements))
+        
         return actions
+    
+    def _create_placement_action(self, 
+                                cards1: List[Card], positions1: List[Tuple[str, int]],
+                                cards2: List[Card], positions2: List[Tuple[str, int]],
+                                cards3: List[Card], positions3: List[Tuple[str, int]]) -> Action:
+        """Helper to create a placement action from card groups."""
+        placements = []
+        
+        for card, (pos, idx) in zip(cards1, positions1):
+            placements.append((card, pos, idx))
+        
+        for card, (pos, idx) in zip(cards2, positions2):
+            placements.append((card, pos, idx))
+        
+        for card, (pos, idx) in zip(cards3, positions3):
+            placements.append((card, pos, idx))
+        
+        return Action(placements)
+    
+    def _check_straight_potential(self, cards: List[Card]) -> bool:
+        """Check if cards have straight potential."""
+        ranks = sorted([c.rank_value for c in cards if not c.is_joker])
+        joker_count = sum(1 for c in cards if c.is_joker)
+        
+        if not ranks:
+            return True  # All jokers can make a straight
+        
+        # Check for gaps that could be filled
+        min_rank = min(ranks)
+        max_rank = max(ranks)
+        
+        # If range is too wide, no straight possible
+        if max_rank - min_rank > 4:
+            # Check for ace-low straight
+            if Rank.ACE.value in ranks and any(r <= 3 for r in ranks):
+                return True
+            return False
+        
+        # Count gaps
+        gaps = 0
+        for r in range(min_rank, max_rank):
+            if r not in ranks:
+                gaps += 1
+        
+        return gaps <= joker_count
+    
+    def _get_connected_cards(self, cards: List[Card]) -> List[Card]:
+        """Get cards that are connected (for straight potential)."""
+        sorted_cards = sorted(cards, key=lambda c: c.rank_value)
+        connected = [sorted_cards[0]]
+        
+        for i in range(1, len(sorted_cards)):
+            if sorted_cards[i].rank_value - sorted_cards[i-1].rank_value <= 2:
+                connected.append(sorted_cards[i])
+            else:
+                # Start new group if better
+                if len(connected) < i:
+                    connected = [sorted_cards[i]]
+        
+        return connected
     
     def _generate_regular_actions(self, cards: List[Card]) -> List[Action]:
         """
