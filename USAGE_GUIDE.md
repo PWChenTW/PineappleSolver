@@ -1,410 +1,422 @@
-# 通用AI協作開發模板使用指南
+# OFC Solver 使用指南
 
 ## 📋 概述
 
-這個通用模板整合了我們在對話中討論的所有AI協作最佳實踐：
+PineappleSolver 是一個專為 Open Face Chinese Poker (OFC) / 大菠蘿撲克開發的 AI 求解器，提供三種使用方式：
 
-1. **Claude-Claude Code 多實例協作** - 支援多個實例並行工作
-2. **規格驅動開發 (SDD)** - 結構化的開發流程
-3. **整合式方法論** - BDD + DDD + TDD 的完美結合
-4. **Sub Agents 專業分工** - 5個專業AI助手
-5. **Hooks 自動化** - 無需人工提醒的品質保證
-6. **通用項目支持** - 適用於各種軟件開發項目
+1. **Web GUI** - 直觀的圖形界面，支持點擊式卡牌輸入
+2. **RESTful API** - 完整的 FastAPI 端點，支持程式化調用
+3. **Python SDK** - 直接在代碼中調用求解器功能
+4. **監控系統** - Prometheus + Grafana 的完整可觀測性
+5. **生產就緒** - 結構化錯誤處理、日誌記錄、性能優化
 
 ## 🎯 使用場景
 
-### 適合的項目類型
-✅ **Web應用開發** (前端、後端、全棧)
-✅ **桌面應用程序**
-✅ **API服務和微服務**
-✅ **工具和庫開發**
-✅ **遊戲項目**
-✅ **數據處理應用**
-✅ **需要高代碼品質的項目**
-✅ **團隊協作開發**
-✅ **AI輔助開發探索**
+### 適合的使用者
+✅ **OFC 玩家** - 學習最佳策略和提升技巧
+✅ **撲克教練** - 分析牌局和教學工具
+✅ **遊戲開發者** - 集成 AI 求解功能到應用中
+✅ **研究人員** - 分析 OFC 數學和策略
+✅ **軟體開發者** - 學習 MCTS 算法實現
+✅ **AI 愛好者** - 探索遊戲 AI 的應用
 
-### 不適合的項目類型
-❌ 簡單的一次性腳本
-❌ 純靜態網頁
-❌ 學習性質的小練習
+### 主要功能
+- 初始5張牌的最佳放置策略
+- 中後期牌局的最優決策分析
+- 犯規風險評估和避免建議
+- 期望分數計算和置信度評估
+- 多線程並行計算支持
+- 實時求解結果展示
 
 ## 🚀 快速開始三步驟
 
-### Step 1: 複製模板
+### Step 1: 安裝與設置
 ```bash
-# 方式1: 直接複製目錄
-cp -r /path/to/General_Project_Template my-new-project
-cd my-new-project
+# 克隆項目
+git clone git@github.com:PWChenTW/PineappleSolver.git
+cd PineappleSolver
 
-# 方式2: 用於特定項目類型
-cp -r General_Project_Template my-web-app
-cp -r General_Project_Template my-game-project
-cp -r General_Project_Template my-api-service
+# 安裝依賴
+pip install -r requirements.txt
 ```
 
-### Step 2: 執行一鍵設置
+### Step 2: 啟動服務
 ```bash
-# 運行設置腳本
-./setup.sh
+# 啟動 API 服務器（必需）
+python run_api.py
 
-# 測試環境
-./test_setup.sh
+# 在新終端啟動 GUI（可選）
+streamlit run gui/app_v2.py
 ```
 
-### Step 3: 初始化項目
+### Step 3: 開始使用
 ```bash
-# 啟動Claude Code
-claude-code
+# 方式1: 使用 Web GUI
+# 瀏覽器訪問 http://localhost:8501
 
-# 根據你的項目類型調整配置
-# Web應用示例
-> 使用 architect 幫我設計一個用戶管理系統的架構
+# 方式2: 使用 API
+# 瀏覽器訪問 http://localhost:8000/docs
 
-# 遊戲項目示例  
-> 使用 business-analyst 分析大菠蘿(OFC)遊戲的核心玩法需求
-
-# API服務示例
-> 使用 integration-specialist 設計RESTful API的架構
+# 方式3: Python 代碼調用
+python examples/api_quick_start.py
 ```
 
-## 🔄 開發工作流程
+## 📖 詳細使用說明
 
-### 標準SDD流程
+### 方式一：Web GUI 使用
 
-#### 1. 功能規格創建
+#### 基本操作流程
+1. **啟動服務**
+   ```bash
+   # 終端1: API 服務
+   python run_api.py
+   
+   # 終端2: GUI 界面
+   streamlit run gui/app_v2.py
+   ```
+
+2. **訪問界面**
+   - 瀏覽器打開 http://localhost:8501
+   - 檢查 API 連接狀態（側邊欄）
+
+3. **輸入牌局**
+   - 選擇輸入位置（當前抽到的牌、玩家1/2各墩位）
+   - 點擊卡牌網格選擇卡牌
+   - 灰色按鈕表示已使用的卡牌
+
+4. **求解策略**
+   - 設定求解參數（時間限制、線程數、模擬次數） 
+   - 點擊"🎯 求解最佳strategy"
+   - 查看結果和評估信息
+
+#### GUI 功能特色
+- **點擊式輸入**: 無需記憶卡牌格式，直接點擊選擇
+- **即時反饋**: 已使用卡牌自動標記，避免重複選擇
+- **視覺化結果**: 卡牌結果以圖像形式顯示
+- **參數調整**: 可自訂求解時間和精度
+- **狀態追蹤**: 顯示所有玩家的牌局狀態
+
+### 方式二：RESTful API 使用
+
+#### 基本端點
 ```bash
-# Web應用示例
-> /spec-init "user-auth" "用戶註冊、登錄和權限管理系統"
+# 健康檢查
+GET /api/v1/health
 
-# 遊戲項目示例
-> /spec-init "ofc-hand-eval" "OFC手牌評分和比較系統"
+# 求解最佳策略  
+POST /api/v1/solve
 
-# API服務示例  
-> /spec-init "user-api" "用戶管理REST API接口"
+# 批量求解
+POST /api/v1/solve_batch
+
+# API 文檔
+GET /docs
 ```
 
-系統會自動：
-- 創建 `.kiro/specs/[功能名稱]/` 目錄
-- 生成 `spec.json` 狀態文件
-- 準備需求、設計、任務文檔結構
-
-#### 2. 需求分析（BDD階段）
+#### 求解請求範例
 ```bash
-> /spec-requirements user-auth
+curl -X POST http://localhost:8000/api/v1/solve \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: test_key" \
+  -d '{
+    "game_state": {
+      "current_round": 1,
+      "players": [
+        {
+          "player_id": "player1",
+          "top_hand": {"cards": [], "max_size": 3},
+          "middle_hand": {"cards": [], "max_size": 5},
+          "bottom_hand": {"cards": [], "max_size": 5},
+          "in_fantasy_land": false,
+          "next_fantasy_land": false,
+          "is_folded": false
+        }
+      ],
+      "current_player_index": 0,
+      "drawn_cards": [
+        {"rank": "A", "suit": "s"},
+        {"rank": "K", "suit": "h"}
+      ]
+    },
+    "options": {
+      "time_limit": 10.0,
+      "threads": 4
+    }
+  }'
 ```
 
-**business-analyst** Sub Agent會：
-- 分析業務需求和用戶故事
-- 生成Gherkin BDD場景
-- 設計用戶體驗流程
-- 識別功能邊界和約束
+#### Python 客戶端範例
+```python
+import requests
 
-生成的文件：`.kiro/specs/user-auth/requirements.md`
+# 初始化客戶端
+api_url = "http://localhost:8000"
+headers = {"X-API-Key": "test_key"}
 
-#### 3. 技術設計（DDD階段）
-人工審核需求後：
-```bash
-> /spec-design user-auth
+# 健康檢查
+response = requests.get(f"{api_url}/api/v1/health")
+print(f"API 狀態: {response.json()}")
+
+# 求解請求
+game_data = {
+    "game_state": {
+        "drawn_cards": [
+            {"rank": "A", "suit": "s"},
+            {"rank": "K", "suit": "h"}
+        ]
+    },
+    "options": {
+        "time_limit": 30.0,
+        "threads": 4
+    }
+}
+
+response = requests.post(
+    f"{api_url}/api/v1/solve",
+    json=game_data,
+    headers=headers
+)
+
+result = response.json()
+print(f"最佳策略: {result['move']}")
+print(f"期望分數: {result['evaluation']}")
 ```
 
-**architect** Sub Agent會：
-- 設計系統架構和領域模型
-- 定義實體、值對象、聚合
-- 選擇技術棧和設計模式
-- 規劃數據庫和API設計
+### 方式三：Python SDK 使用
 
-生成的文件：`.kiro/specs/user-auth/design.md`
+#### 直接調用求解器
+```python
+from src.ofc_solver import create_solver
+from src.core.domain import GameState, Card
 
-#### 4. 任務分解（TDD準備）
-設計審核通過後：
-```bash
-> /spec-tasks user-auth
+# 創建求解器
+solver = create_solver(
+    time_limit=30.0,
+    num_threads=4,
+    simulations=100000
+)
+
+# 創建遊戲狀態
+game = GameState(num_players=2, player_index=0)
+
+# 添加抽到的牌
+drawn_cards = [
+    Card("A", "s"),  # A♠
+    Card("K", "h"),  # K♥
+    Card("Q", "d"),  # Q♦
+    Card("J", "c"),  # J♣
+    Card("T", "s")   # T♠
+]
+game.set_drawn_cards(drawn_cards)
+
+# 求解最佳策略
+result = solver.solve(game)
+
+print(f"最佳動作: {result.move}")
+print(f"期望分數: {result.evaluation}")
+print(f"置信度: {result.confidence}")
+print(f"計算時間: {result.computation_time}")
 ```
 
-系統會：
-- 將設計分解為具體任務
-- 分配給適當的Sub Agents
-- 安排TDD測試任務
-- 規劃實施優先級
+#### 高級用法
+```python
+# 設定對手已知牌
+game.players[1].add_card_to_hand("bottom", Card("9", "h"))
+game.players[1].add_card_to_hand("middle", Card("8", "d"))
 
-生成的文件：`.kiro/specs/user-auth/tasks.md`
+# 分析特定手牌組合
+from src.core.hand_evaluator import HandEvaluator
 
-#### 5. 開始實施
-```bash
-> 現在開始實施 user-auth
+evaluator = HandEvaluator()
+hand_cards = [Card("A", "s"), Card("A", "h"), Card("K", "s")]
+strength = evaluator.evaluate_hand(hand_cards)
+print(f"手牌強度: {strength}")
+
+# 批量分析多個方案
+scenarios = [
+    {"cards": [Card("A", "s")], "position": "bottom"},
+    {"cards": [Card("A", "s")], "position": "middle"},
+    {"cards": [Card("A", "s")], "position": "top"}
+]
+
+for scenario in scenarios:
+    test_game = game.copy()
+    # 設定測試方案並求解
+    result = solver.solve(test_game)
+    print(f"方案 {scenario}: 分數 {result.evaluation}")
 ```
 
-## 👥 Sub Agents 專業分工
+## 🔧 高級配置
 
-### 1. business-analyst (業務分析師)
-**最適合的任務**：
-- 需求收集和分析
-- 用戶故事編寫
-- BDD場景設計
-- 業務流程梳理
+### 性能調整
+```python
+# 快速分析（10秒內）
+solver_fast = create_solver(
+    time_limit=10.0,
+    num_threads=4,
+    simulations=50000
+)
 
-**觸發示例**：
-```bash
-> 使用 business-analyst 分析電商網站的購物車功能需求
-> 讓 business-analyst 設計用戶註冊流程的BDD場景
+# 標準分析（平衡速度與精度）
+solver_standard = create_solver(
+    time_limit=30.0,
+    num_threads=4,
+    simulations=100000
+)
+
+# 深度分析（最高精度）
+solver_deep = create_solver(
+    time_limit=60.0,
+    num_threads=8,
+    simulations=500000
+)
 ```
 
-### 2. architect (系統架構師)
-**最適合的任務**：
-- 系統架構設計
-- 技術選型
-- DDD領域建模
-- 設計模式應用
-
-**觸發示例**：
+### 監控系統設置
 ```bash
-> 使用 architect 設計微服務架構
-> 讓 architect 選擇合適的數據庫方案
+# 啟動完整監控（需要 Docker）
+cd monitoring
+docker-compose -f docker-compose-monitoring-only.yml up -d
+
+# 訪問監控面板
+# Grafana: http://localhost:3000 (admin/admin)
+# Prometheus: http://localhost:9090
 ```
 
-### 3. data-specialist (數據專家)  
-**最適合的任務**：
-- 算法設計和實現
-- 數據結構優化
-- 性能分析和改進
-- 複雜計算邏輯
+### 日誌配置
+```python
+import logging
+from src.logging_config import setup_logging
 
-**觸發示例**：
-```bash
-> 使用 data-specialist 優化搜索算法
-> 讓 data-specialist 設計緩存策略
+# 設置日誌級別
+setup_logging(level=logging.INFO)
+
+# 自定義日誌格式
+setup_logging(
+    level=logging.DEBUG,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 ```
 
-### 4. integration-specialist (集成專家)
-**最適合的任務**：
-- API設計和開發
-- 第三方服務集成
-- 系統間通信
-- 數據格式轉換
+## 📊 結果分析與解釋
 
-**觸發示例**：
-```bash
-> 使用 integration-specialist 設計RESTful API
-> 讓 integration-specialist 集成支付網關
+### GUI 結果理解
+- **最佳放置策略**: 每張牌的推薦位置
+- **期望分數**: 預期的總得分
+- **置信度**: 結果的可信程度（85%+ 為高置信度）
+- **計算時間**: 實際求解耗時
+- **模擬次數**: 完成的 MCTS 模擬數量
+
+### API 響應格式
+```json
+{
+  "move": {
+    "card_placements": [
+      {
+        "card": {"rank": "A", "suit": "s"},
+        "hand": "bottom"
+      }
+    ],
+    "is_fold": false
+  },
+  "evaluation": 15.3,
+  "confidence": 0.85,
+  "computation_time_seconds": 10.2,
+  "simulations": 65432,
+  "expected_score": 15.3
+}
 ```
 
-### 5. test-engineer (測試工程師)
-**最適合的任務**：
-- 測試策略制定
-- 自動化測試實現
-- 代碼品質檢查
-- 性能測試
-
-**觸發示例**：
-```bash
-> 使用 test-engineer 設計測試策略
-> 讓 test-engineer 實現單元測試
-```
-
-## 💡 項目類型特定指南
-
-### Web應用開發
-
-#### 典型開發流程
-1. **業務分析**: 分析用戶需求和業務流程
-2. **架構設計**: 選擇前後端技術棧，設計API
-3. **數據建模**: 設計數據庫schema和領域模型
-4. **API開發**: 實現後端API接口
-5. **前端實現**: 開發用戶界面
-6. **集成測試**: 端到端功能驗證
-
-#### 推薦工具鏈
-```bash
-# 後端
-- Python: FastAPI + SQLAlchemy + PostgreSQL
-- Node.js: Express + Prisma + MongoDB
-- Java: Spring Boot + JPA + MySQL
-
-# 前端  
-- React + TypeScript + Tailwind CSS
-- Vue.js + TypeScript + Element Plus
-- Angular + TypeScript + Angular Material
-```
-
-### 遊戲開發
-
-#### 典型開發流程
-1. **遊戲設計**: 定義遊戲規則和玩法機制
-2. **架構規劃**: 設計遊戲引擎架構
-3. **算法實現**: 實現遊戲邏輯和AI
-4. **渲染系統**: 實現圖形和動畫
-5. **用戶界面**: 設計遊戲UI/UX
-6. **測試平衡**: 遊戲平衡性測試
-
-#### 大菠蘿(OFC)範例
-```bash
-# 1. 需求分析
-> /spec-init "ofc-game" "開放式面朝上中國撲克遊戲"
-> /spec-requirements ofc-game
-
-# 2. 核心功能設計
-> /spec-init "card-eval" "撲克牌手牌評分系統"
-> /spec-init "game-logic" "OFC遊戲規則實現"
-> /spec-init "scoring" "OFC計分和獎懲系統"
-```
-
-### API服務開發
-
-#### 典型開發流程
-1. **API設計**: 定義端點和數據格式
-2. **認證授權**: 實現安全機制
-3. **業務邏輯**: 實現核心功能
-4. **數據持久化**: 數據庫集成
-5. **監控日誌**: 可觀測性實現
-6. **性能優化**: 緩存和優化
-
-#### 推薦實踐
-```bash
-# API設計原則
-- RESTful風格
-- 統一響應格式
-- 適當的HTTP狀態碼
-- 完整的錯誤處理
-- 清晰的文檔
-
-# 性能考量
-- 分頁機制
-- 數據緩存
-- 限流保護
-- 異步處理
-```
-
-## 🔧 高級功能
-
-### 1. 多實例協作
-```bash
-# 在不同終端中啟動多個Claude Code實例
-# 實例1: 專注前端開發
-cd my-project && claude-code
-> 我負責前端React組件開發
-
-# 實例2: 專注後端API  
-cd my-project && claude-code
-> 我負責後端API開發
-
-# 實例3: 專注測試
-cd my-project && claude-code  
-> 我負責測試和品質保證
-```
-
-### 2. 自定義Sub Agent
-```bash
-# 添加專門的Agent (如：ui-designer)
-# 1. 創建 .claude/agents/ui-designer.md
-# 2. 定義專長和觸發詞
-# 3. 在 CLAUDE.md 中添加觸發規則
-```
-
-### 3. 項目模板擴展
-```bash
-# 為特定項目類型創建子模板
-cp -r General_Project_Template React_App_Template
-# 在React_App_Template中添加React特定配置
-```
-
-## 📊 監控和分析
-
-### 進度追蹤
-```bash
-# 查看所有功能規格狀態
-python .claude/scheduler/spec_scheduler.py list
-
-# 查看項目整體進度  
-python .claude/scheduler/spec_scheduler.py report
-
-# 查看特定功能狀態
-python .claude/scheduler/spec_scheduler.py status user-auth
-```
-
-### 命令審計
-```bash
-# 查看最近24小時的命令統計
-python scripts/monitoring/view_command_audit.py
-
-# 查看最常用的命令
-python scripts/monitoring/view_command_audit.py --top-commands 10
-
-# 導出詳細報告
-python scripts/monitoring/view_command_audit.py --export report.json
-```
-
-### 品質監控
-```bash
-# 查看代碼品質報告
-cat .quality_check_report.json
-
-# 手動觸發品質檢查
-python .claude/scheduler/quality_check.py
-```
+### 策略建議解讀
+- **期望分數 > 0**: 總體有利，建議繼續遊戲
+- **期望分數 < -10**: 劣勢明顯，考慮保守策略
+- **置信度 < 60%**: 不確定性高，需要更長計算時間
+- **is_fold = true**: 建議棄牌（極劣勢情況）
 
 ## 🛠️ 故障排除
 
 ### 常見問題
 
-#### 1. Claude Code settings.json 錯誤
+#### 1. API 服務無法啟動
 ```bash
-# 檢查JSON格式
-python3 -m json.tool .claude/settings.json
+# 檢查端口是否被占用
+lsof -i :8000
 
-# 如果有錯誤，參考工作範例格式修復
+# 使用不同端口
+python run_api.py --host 0.0.0.0 --port 8001
 ```
 
-#### 2. Sub Agent 沒有自動觸發
+#### 2. GUI 無法連接 API
 ```bash
-# 檢查觸發詞是否正確
-# 在對話中明確提及觸發詞，如：
-> 使用 business-analyst 分析需求
-> 讓 architect 設計架構
+# 確保 API 服務正在運行
+curl http://localhost:8000/api/v1/health
+
+# 檢查防火牆設置
+# 確認 8000 和 8501 端口開放
 ```
 
-#### 3. Hook 沒有執行
-```bash
-# 檢查腳本權限
-chmod +x .claude/scheduler/quality_check.py
+#### 3. 求解速度太慢
+```python
+# 降低模擬次數
+solver = create_solver(simulations=10000)
 
-# 檢查路徑是否正確
-ls -la .claude/scheduler/
+# 減少線程數（避免過度競爭）
+solver = create_solver(num_threads=2)
+
+# 設置更短的時間限制
+solver = create_solver(time_limit=5.0)
+```
+
+#### 4. 記憶體使用過高
+```python
+# 使用較小的搜索樹
+solver = create_solver(
+    max_tree_nodes=50000,
+    memory_limit_mb=1024
+)
 ```
 
 ### 調試技巧
 ```bash
 # 啟用詳細日誌
-export CLAUDE_DEBUG=1
-claude-code
+export OFC_LOG_LEVEL=DEBUG
+python run_api.py
 
-# 查看Hook執行日誌
-tail -f .command_audit.log
+# 查看性能統計
+python -m cProfile -o profile.stats run_api.py
 
-# 手動測試腳本
-python3 .claude/scheduler/quality_check.py
+# 監控記憶體使用
+python -m memory_profiler examples/api_quick_start.py
 ```
 
-## 📚 最佳實踐總結
+## 📚 最佳實踐
 
-### 開發流程
-1. **先規格後編碼** - 總是先完成SDD流程
-2. **小步快跑** - 每個功能規格保持適中大小
-3. **持續集成** - 頻繁提交和測試
-4. **文檔同步** - 保持文檔與代碼同步
+### 求解器使用
+1. **合理設置時間限制**: 初學者 10-30 秒，高手 30-60 秒
+2. **根據硬體調整線程**: 通常等於 CPU 核心數
+3. **分階段求解**: 複雜局面可分步驟分析
+4. **結合人類直覺**: AI 建議需要結合實戰經驗
 
-### Sub Agent使用
-1. **明確指派** - 使用"使用 agent-name"明確指派任務
-2. **專業分工** - 讓每個Agent專注其擅長領域
-3. **review結果** - 人工審核Agent輸出
-4. **迭代改進** - 根據結果調整Agent配置
+### 性能優化
+1. **預熱求解器**: 首次使用前進行一次求解預熱
+2. **批量處理**: 多個局面使用 batch API
+3. **結果緩存**: 相似局面可重複使用結果
+4. **監控資源**: 使用監控系統追蹤性能
 
-### 代碼品質
-1. **測試優先** - 關鍵邏輯先寫測試
-2. **自動格式化** - 依賴Hook自動格式化
-3. **安全第一** - 絕不提交敏感信息
-4. **性能意識** - 定期性能檢查和優化
+### 學習建議
+1. **從簡單開始**: 先分析初始 5 張牌的放置
+2. **對比結果**: 將 AI 建議與個人直覺對比
+3. **理解原理**: 學習 OFC 基本策略和數學原理
+4. **實戰驗證**: 在實際遊戲中驗證 AI 建議的效果
 
 ---
 
-這個通用模板為各種軟件項目提供了solid foundation，讓您能夠充分利用AI協作的力量，創建高品質的軟件產品。無論是Web應用、桌面軟件、遊戲還是API服務，都能從這個模板中受益。
+## 🎯 總結
+
+PineappleSolver 為 OFC 玩家提供了專業級的 AI 分析工具，無論是學習提升、教學分析還是軟體集成，都能滿足不同層次的需求。通過 Web GUI、RESTful API 和 Python SDK 三種使用方式，讓每個用戶都能找到最適合的使用方法。
+
+詳細文檔請參考：
+- [GUI 使用手冊](GUI_USER_GUIDE.md)
+- [API 快速指南](QUICK_START.md)
+- [專案技術文檔](docs/)
+- [遊戲規則說明](OFC_GAME_RULES.md)
