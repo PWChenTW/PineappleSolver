@@ -1,0 +1,984 @@
+openapi: 3.0.3
+info:
+  title: OFC Solver API
+  version: 1.0.0
+  description: |
+    RESTful API for Open Face Chinese (OFC) poker solver.
+    Provides endpoints for solving game positions, analyzing situations,
+    and batch processing.
+  contact:
+    name: OFC Solver Team
+    email: support@ofcsolver.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.ofcsolver.com
+    description: Production server
+  - url: https://staging-api.ofcsolver.com
+    description: Staging server
+  - url: http://localhost:8000
+    description: Local development server
+
+security:
+  - ApiKeyAuth: []
+
+tags:
+  - name: Solver
+    description: Game solving operations
+  - name: Analysis
+    description: Position analysis operations
+  - name: Health
+    description: Service health monitoring
+  - name: Batch
+    description: Batch processing operations
+
+paths:
+  /api/v1/solve:
+    post:
+      tags:
+        - Solver
+      summary: Solve OFC game position
+      description: |
+        Solve an OFC game position using MCTS algorithm.
+        For long-running computations, consider using async mode.
+      operationId: solvePosition
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolveRequest'
+      responses:
+        '200':
+          description: Successful solution
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SolveResult'
+        '202':
+          description: Accepted for async processing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AsyncTaskResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/analyze:
+    post:
+      tags:
+        - Analysis
+      summary: Analyze game position
+      description: |
+        Quick analysis of game position without deep search.
+        Returns evaluation scores and basic statistics.
+      operationId: analyzePosition
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnalyzeRequest'
+      responses:
+        '200':
+          description: Successful analysis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PositionAnalysis'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/batch:
+    post:
+      tags:
+        - Batch
+      summary: Batch solve multiple positions
+      description: |
+        Submit multiple positions for batch processing.
+        Returns a batch job ID for tracking.
+      operationId: batchSolve
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchSolveRequest'
+      responses:
+        '202':
+          description: Batch job accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchJobResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/batch/{job_id}:
+    get:
+      tags:
+        - Batch
+      summary: Get batch job status
+      description: Retrieve the status and results of a batch job
+      operationId: getBatchJobStatus
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          description: Batch job identifier
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Batch job status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchJobStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/tasks/{task_id}:
+    get:
+      tags:
+        - Solver
+      summary: Get async task status
+      description: Retrieve the status and result of an async solve task
+      operationId: getTaskStatus
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          description: Task identifier
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Task status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/health:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Check service health and readiness
+      operationId: healthCheck
+      security: []  # No auth required for health check
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+        '503':
+          description: Service is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key for authentication
+
+  schemas:
+    # Request Models
+    SolveRequest:
+      type: object
+      required:
+        - game_state
+      properties:
+        request_id:
+          type: string
+          format: uuid
+          description: Client-provided request ID for tracking
+        game_state:
+          $ref: '#/components/schemas/GameState'
+        options:
+          $ref: '#/components/schemas/SolveOptions'
+        async:
+          type: boolean
+          default: false
+          description: Whether to process asynchronously
+
+    AnalyzeRequest:
+      type: object
+      required:
+        - game_state
+      properties:
+        request_id:
+          type: string
+          format: uuid
+          description: Client-provided request ID for tracking
+        game_state:
+          $ref: '#/components/schemas/GameState'
+        options:
+          $ref: '#/components/schemas/AnalyzeOptions'
+
+    BatchSolveRequest:
+      type: object
+      required:
+        - positions
+      properties:
+        request_id:
+          type: string
+          format: uuid
+          description: Client-provided request ID for tracking
+        positions:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            type: object
+            required:
+              - id
+              - game_state
+            properties:
+              id:
+                type: string
+                description: Position identifier within batch
+              game_state:
+                $ref: '#/components/schemas/GameState'
+              options:
+                $ref: '#/components/schemas/SolveOptions'
+        batch_options:
+          $ref: '#/components/schemas/BatchOptions'
+
+    # Game State Models
+    GameState:
+      type: object
+      required:
+        - current_round
+        - players
+        - current_player_index
+        - remaining_deck
+      properties:
+        current_round:
+          type: integer
+          minimum: 1
+          maximum: 17
+          description: Current round number (1-17)
+        players:
+          type: array
+          minItems: 2
+          maxItems: 4
+          items:
+            $ref: '#/components/schemas/PlayerState'
+        current_player_index:
+          type: integer
+          minimum: 0
+          description: Index of current player
+        remaining_deck:
+          type: array
+          items:
+            $ref: '#/components/schemas/Card'
+          description: Cards remaining in deck
+        dealer_position:
+          type: integer
+          minimum: 0
+          description: Dealer position index
+        
+    PlayerState:
+      type: object
+      required:
+        - player_id
+        - top_hand
+        - middle_hand
+        - bottom_hand
+        - in_fantasy_land
+      properties:
+        player_id:
+          type: string
+          description: Player identifier
+        top_hand:
+          $ref: '#/components/schemas/HandCards'
+        middle_hand:
+          $ref: '#/components/schemas/HandCards'
+        bottom_hand:
+          $ref: '#/components/schemas/HandCards'
+        in_fantasy_land:
+          type: boolean
+          default: false
+        next_fantasy_land:
+          type: boolean
+          default: false
+        is_folded:
+          type: boolean
+          default: false
+
+    HandCards:
+      type: object
+      required:
+        - cards
+        - max_size
+      properties:
+        cards:
+          type: array
+          items:
+            $ref: '#/components/schemas/Card'
+        max_size:
+          type: integer
+          enum: [3, 5]
+          description: Maximum hand size (3 for top, 5 for middle/bottom)
+
+    Card:
+      type: object
+      required:
+        - rank
+        - suit
+      properties:
+        rank:
+          type: string
+          enum: ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A']
+        suit:
+          type: string
+          enum: ['c', 'd', 'h', 's']
+      example:
+        rank: 'A'
+        suit: 's'
+
+    # Options Models
+    SolveOptions:
+      type: object
+      properties:
+        time_limit:
+          type: number
+          minimum: 0.1
+          maximum: 300
+          default: 30
+          description: Time limit in seconds
+        max_iterations:
+          type: integer
+          minimum: 100
+          maximum: 1000000
+          description: Maximum MCTS iterations
+        threads:
+          type: integer
+          minimum: 1
+          maximum: 32
+          default: 4
+          description: Number of parallel threads
+        exploration_constant:
+          type: number
+          minimum: 0.1
+          maximum: 10.0
+          default: 1.4
+          description: MCTS exploration constant
+        use_neural_network:
+          type: boolean
+          default: false
+          description: Whether to use neural network evaluation
+
+    AnalyzeOptions:
+      type: object
+      properties:
+        depth:
+          type: integer
+          minimum: 1
+          maximum: 5
+          default: 3
+          description: Analysis depth
+        include_alternatives:
+          type: boolean
+          default: true
+          description: Include alternative moves
+
+    BatchOptions:
+      type: object
+      properties:
+        priority:
+          type: string
+          enum: ['low', 'normal', 'high']
+          default: 'normal'
+        notification_webhook:
+          type: string
+          format: uri
+          description: Webhook URL for completion notification
+
+    # Response Models
+    SolveResult:
+      type: object
+      required:
+        - request_id
+        - best_move
+        - evaluation
+        - statistics
+      properties:
+        request_id:
+          type: string
+          format: uuid
+        best_move:
+          $ref: '#/components/schemas/Move'
+        evaluation:
+          type: number
+          description: Position evaluation score
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Confidence in the solution
+        alternative_moves:
+          type: array
+          items:
+            $ref: '#/components/schemas/MoveEvaluation'
+        statistics:
+          $ref: '#/components/schemas/SolveStatistics'
+        computation_time:
+          type: number
+          description: Computation time in seconds
+
+    Move:
+      type: object
+      required:
+        - card_placements
+      properties:
+        card_placements:
+          type: array
+          items:
+            $ref: '#/components/schemas/CardPlacement'
+        is_fold:
+          type: boolean
+          default: false
+
+    CardPlacement:
+      type: object
+      required:
+        - card
+        - hand
+      properties:
+        card:
+          $ref: '#/components/schemas/Card'
+        hand:
+          type: string
+          enum: ['top', 'middle', 'bottom']
+
+    MoveEvaluation:
+      type: object
+      required:
+        - move
+        - evaluation
+        - visit_count
+      properties:
+        move:
+          $ref: '#/components/schemas/Move'
+        evaluation:
+          type: number
+        visit_count:
+          type: integer
+        win_rate:
+          type: number
+          minimum: 0
+          maximum: 1
+
+    SolveStatistics:
+      type: object
+      required:
+        - total_iterations
+        - nodes_visited
+        - average_depth
+      properties:
+        total_iterations:
+          type: integer
+        nodes_visited:
+          type: integer
+        average_depth:
+          type: number
+        max_depth:
+          type: integer
+        cache_hits:
+          type: integer
+        cache_misses:
+          type: integer
+
+    PositionAnalysis:
+      type: object
+      required:
+        - request_id
+        - evaluation
+        - hand_strengths
+        - recommendations
+      properties:
+        request_id:
+          type: string
+          format: uuid
+        evaluation:
+          type: number
+          description: Overall position evaluation
+        hand_strengths:
+          type: object
+          properties:
+            top:
+              $ref: '#/components/schemas/HandStrength'
+            middle:
+              $ref: '#/components/schemas/HandStrength'
+            bottom:
+              $ref: '#/components/schemas/HandStrength'
+        recommendations:
+          type: array
+          items:
+            $ref: '#/components/schemas/MoveRecommendation'
+        fantasy_land_probability:
+          type: number
+          minimum: 0
+          maximum: 1
+        foul_probability:
+          type: number
+          minimum: 0
+          maximum: 1
+
+    HandStrength:
+      type: object
+      required:
+        - current_rank
+        - potential_improvements
+      properties:
+        current_rank:
+          type: string
+          description: Current hand ranking
+        current_strength:
+          type: number
+          minimum: 0
+          maximum: 1
+        potential_improvements:
+          type: array
+          items:
+            type: object
+            properties:
+              hand_type:
+                type: string
+              probability:
+                type: number
+              required_cards:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Card'
+
+    MoveRecommendation:
+      type: object
+      required:
+        - move
+        - reasoning
+        - priority
+      properties:
+        move:
+          $ref: '#/components/schemas/Move'
+        reasoning:
+          type: string
+          description: Explanation for the recommendation
+        priority:
+          type: string
+          enum: ['low', 'medium', 'high']
+        expected_value:
+          type: number
+
+    # Async Response Models
+    AsyncTaskResponse:
+      type: object
+      required:
+        - task_id
+        - status
+        - created_at
+      properties:
+        task_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: ['pending', 'processing', 'completed', 'failed']
+        created_at:
+          type: string
+          format: date-time
+        estimated_completion_time:
+          type: string
+          format: date-time
+        status_url:
+          type: string
+          format: uri
+
+    TaskStatus:
+      type: object
+      required:
+        - task_id
+        - status
+        - created_at
+        - updated_at
+      properties:
+        task_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: ['pending', 'processing', 'completed', 'failed', 'cancelled']
+        progress:
+          type: integer
+          minimum: 0
+          maximum: 100
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        result:
+          $ref: '#/components/schemas/SolveResult'
+        error:
+          $ref: '#/components/schemas/ErrorDetail'
+
+    BatchJobResponse:
+      type: object
+      required:
+        - job_id
+        - status
+        - created_at
+        - total_positions
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: ['pending', 'processing', 'completed', 'failed']
+        created_at:
+          type: string
+          format: date-time
+        total_positions:
+          type: integer
+        status_url:
+          type: string
+          format: uri
+
+    BatchJobStatus:
+      type: object
+      required:
+        - job_id
+        - status
+        - created_at
+        - updated_at
+        - total_positions
+        - completed_positions
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: ['pending', 'processing', 'completed', 'failed', 'cancelled']
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        total_positions:
+          type: integer
+        completed_positions:
+          type: integer
+        failed_positions:
+          type: integer
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              position_id:
+                type: string
+              status:
+                type: string
+                enum: ['pending', 'processing', 'completed', 'failed']
+              result:
+                $ref: '#/components/schemas/SolveResult'
+              error:
+                $ref: '#/components/schemas/ErrorDetail'
+
+    # Health and Monitoring Models
+    HealthStatus:
+      type: object
+      required:
+        - status
+        - timestamp
+        - version
+      properties:
+        status:
+          type: string
+          enum: ['healthy', 'degraded', 'unhealthy']
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string
+        uptime:
+          type: integer
+          description: Uptime in seconds
+        components:
+          type: object
+          properties:
+            database:
+              $ref: '#/components/schemas/ComponentHealth'
+            cache:
+              $ref: '#/components/schemas/ComponentHealth'
+            solver_engine:
+              $ref: '#/components/schemas/ComponentHealth'
+            task_queue:
+              $ref: '#/components/schemas/ComponentHealth'
+
+    ComponentHealth:
+      type: object
+      required:
+        - status
+        - latency_ms
+      properties:
+        status:
+          type: string
+          enum: ['healthy', 'degraded', 'unhealthy']
+        latency_ms:
+          type: number
+        details:
+          type: object
+          additionalProperties: true
+
+    # Error Models
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - request_id
+        - timestamp
+      properties:
+        error:
+          $ref: '#/components/schemas/ErrorDetail'
+        request_id:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+
+    ErrorDetail:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: Error code for programmatic handling
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: object
+          additionalProperties: true
+          description: Additional error details
+        field_errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldError'
+
+    FieldError:
+      type: object
+      required:
+        - field
+        - message
+      properties:
+        field:
+          type: string
+          description: Field path with error
+        message:
+          type: string
+          description: Error message for the field
+        code:
+          type: string
+          description: Error code
+
+    # Rate Limit Models
+    RateLimitInfo:
+      type: object
+      required:
+        - limit
+        - remaining
+        - reset
+      properties:
+        limit:
+          type: integer
+          description: Rate limit ceiling
+        remaining:
+          type: integer
+          description: Remaining requests
+        reset:
+          type: integer
+          description: Unix timestamp when limit resets
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: 'BAD_REQUEST'
+              message: 'Invalid request format'
+              details:
+                reason: 'Missing required field'
+            request_id: 'f47ac10b-58cc-4372-a567-0e02b2c3d479'
+            timestamp: '2024-01-20T12:00:00Z'
+
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: 'UNAUTHORIZED'
+              message: 'Invalid or missing API key'
+            request_id: 'f47ac10b-58cc-4372-a567-0e02b2c3d479'
+            timestamp: '2024-01-20T12:00:00Z'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: 'NOT_FOUND'
+              message: 'Resource not found'
+            request_id: 'f47ac10b-58cc-4372-a567-0e02b2c3d479'
+            timestamp: '2024-01-20T12:00:00Z'
+
+    ValidationError:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: 'VALIDATION_ERROR'
+              message: 'Request validation failed'
+              field_errors:
+                - field: 'game_state.current_round'
+                  message: 'Must be between 1 and 17'
+                  code: 'out_of_range'
+            request_id: 'f47ac10b-58cc-4372-a567-0e02b2c3d479'
+            timestamp: '2024-01-20T12:00:00Z'
+
+    TooManyRequests:
+      description: Too many requests
+      headers:
+        X-RateLimit-Limit:
+          schema:
+            type: integer
+          description: Rate limit ceiling
+        X-RateLimit-Remaining:
+          schema:
+            type: integer
+          description: Remaining requests
+        X-RateLimit-Reset:
+          schema:
+            type: integer
+          description: Unix timestamp when limit resets
+        Retry-After:
+          schema:
+            type: integer
+          description: Seconds until retry
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: 'RATE_LIMIT_EXCEEDED'
+              message: 'Rate limit exceeded'
+              details:
+                limit: 100
+                window: '1 hour'
+                retry_after: 3600
+            request_id: 'f47ac10b-58cc-4372-a567-0e02b2c3d479'
+            timestamp: '2024-01-20T12:00:00Z'
+
+    PayloadTooLarge:
+      description: Payload too large
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: 'PAYLOAD_TOO_LARGE'
+              message: 'Request payload exceeds maximum size'
+              details:
+                max_size: '10MB'
+                actual_size: '15MB'
+            request_id: 'f47ac10b-58cc-4372-a567-0e02b2c3d479'
+            timestamp: '2024-01-20T12:00:00Z'
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: 'INTERNAL_ERROR'
+              message: 'An internal error occurred'
+            request_id: 'f47ac10b-58cc-4372-a567-0e02b2c3d479'
+            timestamp: '2024-01-20T12:00:00Z'
