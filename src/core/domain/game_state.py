@@ -18,7 +18,6 @@ from src.exceptions import (
     InvalidInputError, GameRuleViolationError, StateError,
     invalid_card_error, duplicate_card_error, invalid_placement_error
 )
-from src.validation import validate_card, validate_card_list, validate_placement
 
 
 class Street(IntEnum):

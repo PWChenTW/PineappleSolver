@@ -1,7 +1,7 @@
 """
-OFC Solver 主求解器實現（帶結構化日誌）
+OFC Solver 主求解器實現
 
-這是一個示例實現，展示如何整合結構化日誌系統
+整合了 MCTS 算法、錯誤處理和結構化日誌系統。
 """
 
 import time
@@ -229,3 +229,15 @@ class OFCSolver:
             time_taken=elapsed_time,
             top_actions=top_actions
         )
+
+
+# 為了兼容舊測試，從兼容層導入
+try:
+    from .ofc_solver_compat import create_solver, SolverConfig as RealSolverConfig
+    # 導出兼容接口
+    __all__ = ['OFCSolver', 'create_solver', 'RealSolverConfig']
+except ImportError:
+    # 如果導入失敗，定義簡單的 create_solver
+    def create_solver(**kwargs):
+        return OFCSolver(**kwargs)
+    RealSolverConfig = None

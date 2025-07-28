@@ -278,6 +278,20 @@ class Card:
         """Get internal integer value."""
         return self._value
     
+    @property
+    def rank_value(self) -> int:
+        """Get rank as integer value (for sorting/comparison)."""
+        if self.is_joker:
+            return Rank.ACE.value  # Joker treated as Ace for ranking
+        return self.rank.value
+    
+    @property
+    def suit_value(self) -> int:
+        """Get suit as integer value."""
+        if self.is_joker:
+            return 0  # Default suit value for joker
+        return self.suit.value
+    
     def __str__(self) -> str:
         """String representation of card."""
         if self.is_joker:
