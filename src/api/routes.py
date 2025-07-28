@@ -5,10 +5,10 @@ API route implementations for OFC Solver.
 import asyncio
 import json
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import List, Optional, Union, Dict, Any
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks, Body
 from fastapi.responses import JSONResponse
 
 from .models import (
@@ -28,10 +28,17 @@ from .middleware import (
 )
 from .solver_adapter import MCTSSolver, PositionEvaluator
 from .cache import get_cache_client, SimpleTaskQueue
+from .gui_adapter import convert_gui_request
+
+# Import v1 solver routes
+from .v1.solver import router as v1_solver_router
 
 
 # Create router
 router = APIRouter(prefix="/api/v1", tags=["OFC Solver"])
+
+# Include v1 solver routes
+router.include_router(v1_solver_router)
 
 
 # Dependencies
@@ -72,12 +79,12 @@ async def get_auth_info(request: Request) -> dict:
     }
 
 
-# Solve endpoint
+# Solve endpoint (accepts both API and GUI formats)
 @router.post("/solve", response_model=SolveResult)
 async def solve_position(
-    request: SolveRequest,
-    background_tasks: BackgroundTasks,
-    req: Request,
+    request_body: Union[SolveRequest, Dict[str, Any]] = Body(...),
+    background_tasks: BackgroundTasks = None,
+    req: Request = None,
     auth_info: dict = Depends(get_auth_info),
     cache_client = Depends(get_cache_client_dep),
     task_queue: SimpleTaskQueue = Depends(get_task_queue),
@@ -88,7 +95,27 @@ async def solve_position(
     
     Uses MCTS algorithm to find the best move for the current position.
     Can be run synchronously or asynchronously based on the request.
+    
+    Accepts both standard API format and GUI format with drawn_cards.
     """
+    # Handle both API and GUI request formats
+    if isinstance(request_body, dict):
+        # Check if this is a GUI request
+        is_gui_request = 'game_state' in request_body and 'drawn_cards' in request_body.get('game_state', {})
+        
+        if is_gui_request:
+            # Convert GUI request to API format
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info("Processing GUI request format")
+            request = convert_gui_request(request_body)
+        else:
+            # Parse as standard API request
+            request = SolveRequest(**request_body)
+    else:
+        # Already parsed as SolveRequest
+        request = request_body
+    
     # Use provided request ID or generate new one
     request_id = request.request_id or uuid4()
     

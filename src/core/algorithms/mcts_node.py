@@ -1,72 +1,64 @@
 """
-MCTS Node implementation for OFC Solver.
+MCTS node implementation for OFC Solver.
 
-This module implements the tree node structure for Monte Carlo Tree Search.
+This module implements the node structure for Monte Carlo Tree Search
+optimized for Open Face Chinese Poker.
 """
 
 from __future__ import annotations
-from typing import List, Optional, Dict, Tuple, Set
-from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Tuple, Set
+from dataclasses import dataclass
 import math
-import numpy as np
-from itertools import combinations
-from collections import Counter
 
-from src.core.domain.game_state import GameState, Street
-from src.core.domain.card import Card, Rank
-from src.core.domain.hand import Hand
-from src.core.domain.hand_type import HandCategory
+from src.core.domain import GameState, Card, Street
+from src.core.algorithms.evaluator import StateEvaluator
 
 
-@dataclass
+@dataclass(frozen=True)
 class Action:
-    """Represents an action in OFC."""
+    """
+    Represents an action in OFC.
+    
+    For initial street: place all 5 cards
+    For other streets: place 2 cards, discard 1
+    """
     placements: List[Tuple[Card, str, int]]  # (card, position, index)
     discard: Optional[Card] = None
     
     def __hash__(self):
-        """Hash for using actions as dict keys."""
-        placement_tuple = tuple((c.value, p, i) for c, p, i in self.placements)
-        discard_value = self.discard.value if self.discard else -1
-        return hash((placement_tuple, discard_value))
+        """Make action hashable for use as dict key."""
+        placement_tuple = tuple((str(c), pos, idx) for c, pos, idx in self.placements)
+        discard_str = str(self.discard) if self.discard else None
+        return hash((placement_tuple, discard_str))
     
-    def __eq__(self, other):
-        """Equality comparison."""
-        if not isinstance(other, Action):
-            return False
-        return (self.placements == other.placements and 
-                self.discard == other.discard)
+    def __repr__(self):
+        """String representation for debugging."""
+        placements_str = ", ".join(f"{c}→{pos}[{idx}]" for c, pos, idx in self.placements)
+        if self.discard:
+            return f"Action(place=[{placements_str}], discard={self.discard})"
+        return f"Action(place=[{placements_str}])"
 
 
 class MCTSNode:
     """
-    Node in the MCTS search tree.
+    Node in the MCTS tree.
     
-    Each node represents a game state and tracks visit counts,
-    total rewards, and child nodes for each possible action.
+    Represents a game state and tracks statistics for UCB selection.
     """
     
-    __slots__ = (
-        'state', 'parent', 'action', 'children', 
-        'visit_count', 'total_reward', 'untried_actions',
-        'is_terminal', '_ucb_values_cache'
-    )
-    
-    def __init__(self, 
-                 state: GameState,
-                 parent: Optional[MCTSNode] = None,
-                 action: Optional[Action] = None):
+    def __init__(self, state: GameState, parent: Optional['MCTSNode'] = None, 
+                 parent_action: Optional[Action] = None):
         """
         Initialize MCTS node.
         
         Args:
-            state: The game state at this node
-            parent: Parent node in the tree
-            action: Action that led to this state
+            state: Game state at this node
+            parent: Parent node
+            parent_action: Action that led to this state
         """
         self.state = state
         self.parent = parent
-        self.action = action
+        self.parent_action = parent_action
         
         # Statistics
         self.visit_count = 0
@@ -76,97 +68,103 @@ class MCTSNode:
         self.children: Dict[Action, MCTSNode] = {}
         self.untried_actions: Optional[List[Action]] = None
         
-        # Terminal flag
-        self.is_terminal = state.is_complete
-        
-        # Cache for UCB values
-        self._ucb_values_cache: Optional[Dict[Action, float]] = None
-    
-    @property
-    def is_fully_expanded(self) -> bool:
-        """Check if all actions have been tried."""
-        if self.is_terminal:
-            return True
-        if self.untried_actions is None:
-            return False
-        return len(self.untried_actions) == 0
+        # Cached evaluations
+        self._is_terminal: Optional[bool] = None
+        self._is_fully_expanded: Optional[bool] = None
     
     @property
     def average_reward(self) -> float:
-        """Get average reward for this node."""
+        """Get average reward (win rate)."""
         if self.visit_count == 0:
             return 0.0
         return self.total_reward / self.visit_count
     
+    @property
+    def is_terminal(self) -> bool:
+        """Check if this is a terminal state."""
+        if self._is_terminal is None:
+            self._is_terminal = self.state.is_complete
+        return self._is_terminal
+    
+    @property
+    def is_fully_expanded(self) -> bool:
+        """Check if all actions have been tried."""
+        if self._is_fully_expanded is None:
+            if self.untried_actions is None:
+                self.untried_actions = self._get_legal_actions()
+            self._is_fully_expanded = len(self.untried_actions) == 0
+        return self._is_fully_expanded
+    
     def get_untried_actions(self) -> List[Action]:
-        """
-        Get list of untried actions from this state.
-        
-        Lazily generates actions on first call.
-        """
+        """Get list of untried actions."""
         if self.untried_actions is None:
-            self.untried_actions = self._generate_actions()
+            self.untried_actions = self._get_legal_actions()
         return self.untried_actions
     
-    def _generate_actions(self) -> List[Action]:
-        """Generate all possible actions from current state."""
-        if self.state.is_complete:
+    def _get_legal_actions(self) -> List[Action]:
+        """
+        Generate all legal actions from current state.
+        
+        Returns:
+            List of legal actions
+        """
+        if self.is_terminal:
+            return []
+        
+        # Get current hand
+        current_hand = self.state.current_hand
+        if not current_hand:
+            return []
+        
+        # Get valid placement positions
+        positions = self.state.get_valid_placements()
+        if not positions:
             return []
         
         actions = []
-        current_hand = self.state.current_hand
-        
-        if not current_hand:
-            # No cards in hand - need to deal
-            return []
         
         if self.state.current_street == Street.INITIAL:
-            # Initial street - must place all 5 cards
-            actions.extend(self._generate_initial_actions(current_hand))
+            # Initial placement - need to place all 5 cards
+            actions.extend(self._generate_initial_placements(current_hand, positions))
         else:
             # Regular street - place 2, discard 1
-            actions.extend(self._generate_regular_actions(current_hand))
+            actions.extend(self._generate_regular_placements(current_hand, positions))
         
         return actions
     
-    def _generate_initial_actions(self, cards: List[Card]) -> List[Action]:
+    def _generate_initial_placements(self, cards: List[Card], 
+                                   positions: List[Tuple[str, int]]) -> List[Action]:
         """
-        Generate actions for initial street (place all 5 cards).
+        Generate initial placement actions with strategic templates.
         
-        Uses intelligent strategies based on hand strength analysis.
+        Uses heuristics to limit the number of actions to evaluate.
         """
-        # Get available positions
-        positions = self.state.get_valid_placements()
+        if len(cards) != 5 or len(positions) < 5:
+            return []
         
-        if len(positions) < 5:
-            return []  # Not enough positions
+        actions = []
         
-        # Group positions by row
+        # Sort cards by strength for easier strategy implementation
+        sorted_cards = sorted(cards, key=lambda c: c.rank_value, reverse=True)
+        
+        # Get position groups
         front_positions = [(pos, idx) for pos, idx in positions if pos == 'front']
         middle_positions = [(pos, idx) for pos, idx in positions if pos == 'middle']
         back_positions = [(pos, idx) for pos, idx in positions if pos == 'back']
         
-        actions = []
+        # Strategy 1: Pair/trips priority placement
+        rank_counts = {}
+        for card in cards:
+            rank = card.rank_value
+            rank_counts[rank] = rank_counts.get(rank, 0) + 1
         
-        # Analyze card strength
-        sorted_cards = sorted(cards, key=lambda c: c.rank_value, reverse=True)
-        
-        # Count pairs and suits
-        rank_counts = Counter(card.rank_value for card in cards if not card.is_joker)
-        suit_counts = Counter(card.suit_value for card in cards if not card.is_joker)
-        joker_count = sum(1 for card in cards if card.is_joker)
-        
-        # Identify pairs
-        pairs = [(rank, count) for rank, count in rank_counts.items() if count >= 2]
-        pairs.sort(key=lambda x: x[0], reverse=True)  # Sort by rank
-        
-        # Strategy 1: If we have a pair, consider placements that utilize it
+        pairs = [(rank, cards) for rank, count in rank_counts.items() if count >= 2]
         if pairs:
-            highest_pair_rank = pairs[0][0]
-            pair_cards = [c for c in cards if c.rank_value == highest_pair_rank][:2]
+            # Place pair in back, distribute rest
+            pair_rank = pairs[0][0]
+            pair_cards = [c for c in cards if c.rank_value == pair_rank][:2]
             other_cards = [c for c in cards if c not in pair_cards]
             
-            # Option 1: Pair in back (strong position)
             if len(back_positions) >= 2 and len(middle_positions) >= 2 and len(front_positions) >= 1:
                 action = self._create_placement_action(
                     pair_cards, back_positions[:2],
@@ -174,28 +172,16 @@ class MCTSNode:
                     other_cards[2:3], front_positions[:1]
                 )
                 actions.append(action)
-            
-            # Option 2: Pair in middle (balanced)
-            if len(middle_positions) >= 2 and len(back_positions) >= 2 and len(front_positions) >= 1:
-                # Put two highest non-pair cards in back
-                sorted_others = sorted(other_cards, key=lambda c: c.rank_value, reverse=True)
-                action = self._create_placement_action(
-                    sorted_others[:2], back_positions[:2],
-                    pair_cards, middle_positions[:2],
-                    sorted_others[2:3], front_positions[:1]
-                )
-                actions.append(action)
-            
-            # Option 3: Pair in front (aggressive, for high pairs)
-            if highest_pair_rank >= Rank.JACK.value and len(front_positions) >= 2:
-                if len(back_positions) >= 2 and len(middle_positions) >= 1:
-                    sorted_others = sorted(other_cards, key=lambda c: c.rank_value, reverse=True)
-                    action = self._create_placement_action(
-                        sorted_others[:2], back_positions[:2],
-                        sorted_others[2:3], middle_positions[:1],
-                        pair_cards, front_positions[:2]
-                    )
-                    actions.append(action)
+        
+        # Consider suited cards
+        suit_counts = {}
+        joker_count = 0
+        for card in cards:
+            if card.is_joker:
+                joker_count += 1
+            else:
+                suit = card.suit_value
+                suit_counts[suit] = suit_counts.get(suit, 0) + 1
         
         # Strategy 2: Flush draw potential
         flush_potential = max(suit_counts.values()) if suit_counts else 0
@@ -256,38 +242,43 @@ class MCTSNode:
         if len(front_positions) >= 1 and len(middle_positions) >= 2 and len(back_positions) >= 2:
             # Alternative 1-2-2 distribution
             action = self._create_placement_action(
-                sorted_cards[4:5], front_positions[:1],  # Lowest 1 in front
+                sorted_cards[4:5], front_positions[:1],  # Lowest in front
                 sorted_cards[2:4], middle_positions[:2],  # Middle 2 in middle
                 sorted_cards[0:2], back_positions[:2]     # Highest 2 in back
             )
             actions.append(action)
         
-        # If no specific strategies worked, fall back to simple placement
+        # Ensure we have at least one action (fallback to arbitrary valid placement)
         if not actions and len(positions) >= 5:
             placements = []
-            for i in range(5):
-                if i < len(positions) and i < len(cards):
-                    placements.append((cards[i], positions[i][0], positions[i][1]))
+            for i, card in enumerate(cards):
+                if i < len(positions):
+                    pos, idx = positions[i]
+                    placements.append((card, pos, idx))
             if len(placements) == 5:
                 actions.append(Action(placements))
         
-        return actions
+        # Remove duplicate actions
+        unique_actions = []
+        seen = set()
+        for action in actions:
+            if action not in seen:
+                seen.add(action)
+                unique_actions.append(action)
+        
+        return unique_actions
     
-    def _create_placement_action(self, 
-                                cards1: List[Card], positions1: List[Tuple[str, int]],
+    def _create_placement_action(self, cards1: List[Card], positions1: List[Tuple[str, int]],
                                 cards2: List[Card], positions2: List[Tuple[str, int]],
                                 cards3: List[Card], positions3: List[Tuple[str, int]]) -> Action:
-        """Helper to create a placement action from card groups."""
+        """Helper to create placement action from card groups."""
         placements = []
         
-        for card, (pos, idx) in zip(cards1, positions1):
-            placements.append((card, pos, idx))
-        
-        for card, (pos, idx) in zip(cards2, positions2):
-            placements.append((card, pos, idx))
-        
-        for card, (pos, idx) in zip(cards3, positions3):
-            placements.append((card, pos, idx))
+        for cards, positions in [(cards1, positions1), (cards2, positions2), (cards3, positions3)]:
+            for i, card in enumerate(cards):
+                if i < len(positions):
+                    pos, idx = positions[i]
+                    placements.append((card, pos, idx))
         
         return Action(placements)
     
@@ -296,142 +287,139 @@ class MCTSNode:
         ranks = sorted([c.rank_value for c in cards if not c.is_joker])
         joker_count = sum(1 for c in cards if c.is_joker)
         
-        if not ranks:
-            return True  # All jokers can make a straight
-        
-        # Check for gaps that could be filled
-        min_rank = min(ranks)
-        max_rank = max(ranks)
-        
-        # If range is too wide, no straight possible
-        if max_rank - min_rank > 4:
-            # Check for ace-low straight
-            if Rank.ACE.value in ranks and any(r <= 3 for r in ranks):
-                return True
+        if len(ranks) + joker_count < 3:
             return False
         
-        # Count gaps
-        gaps = 0
-        for r in range(min_rank, max_rank):
-            if r not in ranks:
-                gaps += 1
+        # Check for connected cards
+        for i in range(len(ranks) - 1):
+            gap = ranks[i+1] - ranks[i]
+            if gap > joker_count + 1:
+                return False
         
-        return gaps <= joker_count
+        return True
     
     def _get_connected_cards(self, cards: List[Card]) -> List[Card]:
-        """Get cards that are connected (for straight potential)."""
-        sorted_cards = sorted(cards, key=lambda c: c.rank_value)
+        """Get cards that could form a straight."""
+        sorted_cards = sorted([c for c in cards if not c.is_joker], 
+                            key=lambda c: c.rank_value)
+        jokers = [c for c in cards if c.is_joker]
+        
+        if len(sorted_cards) < 2:
+            return sorted_cards + jokers
+        
+        # Find the longest connected sequence
         connected = [sorted_cards[0]]
+        available_jokers = len(jokers)
         
         for i in range(1, len(sorted_cards)):
-            if sorted_cards[i].rank_value - sorted_cards[i-1].rank_value <= 2:
+            gap = sorted_cards[i].rank_value - sorted_cards[i-1].rank_value - 1
+            if gap <= available_jokers:
                 connected.append(sorted_cards[i])
+                available_jokers -= gap
             else:
-                # Start new group if better
-                if len(connected) < i:
+                # Start new sequence if current is shorter
+                if len(connected) + len(jokers) < 3:
                     connected = [sorted_cards[i]]
+                    available_jokers = len(jokers)
         
-        return connected
+        # Add jokers to the connected cards
+        return connected + jokers[:available_jokers]
     
-    def _generate_regular_actions(self, cards: List[Card]) -> List[Action]:
+    def _generate_regular_placements(self, cards: List[Card], 
+                                    positions: List[Tuple[str, int]]) -> List[Action]:
         """
-        Generate actions for regular streets (place 2, discard 1).
+        Generate placement actions for regular streets.
         
-        This generates all combinations of placing 2 cards and discarding 1.
+        Place 2 cards and discard 1.
         """
-        if len(cards) != 3:
+        if len(cards) != 3 or len(positions) < 2:
             return []
-        
-        positions = self.state.get_valid_placements()
-        if len(positions) < 2:
-            return []  # Not enough positions
         
         actions = []
         
-        # For each card to discard
-        for discard_idx in range(3):
-            discard_card = cards[discard_idx]
-            place_cards = [cards[i] for i in range(3) if i != discard_idx]
+        # Generate all combinations of 2 cards to place
+        from itertools import combinations
+        for cards_to_place in combinations(cards, 2):
+            discard = [c for c in cards if c not in cards_to_place][0]
             
-            # For each way to place the 2 cards
-            # Try different position combinations
-            for i in range(len(positions)):
-                for j in range(i + 1, len(positions)):
-                    # Place first card in position i, second in position j
-                    action1 = Action([
-                        (place_cards[0], positions[i][0], positions[i][1]),
-                        (place_cards[1], positions[j][0], positions[j][1]),
-                    ], discard=discard_card)
-                    actions.append(action1)
-                    
-                    # Also try swapping the cards
-                    action2 = Action([
-                        (place_cards[1], positions[i][0], positions[i][1]),
-                        (place_cards[0], positions[j][0], positions[j][1]),
-                    ], discard=discard_card)
-                    actions.append(action2)
+            # Generate different position combinations
+            for pos_combo in combinations(positions, 2):
+                # Try both orderings
+                placements1 = [
+                    (cards_to_place[0], pos_combo[0][0], pos_combo[0][1]),
+                    (cards_to_place[1], pos_combo[1][0], pos_combo[1][1])
+                ]
+                actions.append(Action(placements1, discard))
+                
+                # Only add reverse if positions are different
+                if pos_combo[0] != pos_combo[1]:
+                    placements2 = [
+                        (cards_to_place[0], pos_combo[1][0], pos_combo[1][1]),
+                        (cards_to_place[1], pos_combo[0][0], pos_combo[0][1])
+                    ]
+                    actions.append(Action(placements2, discard))
         
-        return actions
+        # Remove duplicates
+        unique_actions = []
+        seen = set()
+        for action in actions:
+            if action not in seen:
+                seen.add(action)
+                unique_actions.append(action)
+        
+        # Limit number of actions for performance (can be tuned)
+        max_actions = 50  # Reasonable limit for regular streets
+        if len(unique_actions) > max_actions:
+            # Prioritize actions based on heuristics
+            # For now, just take first N actions
+            unique_actions = unique_actions[:max_actions]
+        
+        return unique_actions
     
-    def select_child(self, c_puct: float = 1.4) -> MCTSNode:
+    def select_child(self, c_puct: float) -> 'MCTSNode':
         """
-        Select best child using UCB formula.
+        Select child using UCB1 formula.
         
         Args:
             c_puct: Exploration constant
             
         Returns:
-            Best child node according to UCB
+            Selected child node
         """
-        if not self.children:
-            raise ValueError("No children to select from")
-        
-        # Clear cache when selecting (visit counts may have changed)
-        self._ucb_values_cache = None
-        
-        best_value = -float('inf')
+        best_score = -float('inf')
         best_child = None
         
-        parent_visit_sqrt = math.sqrt(self.visit_count)
-        
-        for action, child in self.children.items():
-            if child.visit_count == 0:
-                ucb_value = float('inf')  # Prioritize unvisited nodes
-            else:
-                exploitation = child.average_reward
-                exploration = c_puct * parent_visit_sqrt / (1 + child.visit_count)
-                ucb_value = exploitation + exploration
+        for child in self.children.values():
+            # UCB1 formula
+            exploitation = child.average_reward
+            exploration = c_puct * math.sqrt(math.log(self.visit_count) / child.visit_count)
+            score = exploitation + exploration
             
-            if ucb_value > best_value:
-                best_value = ucb_value
+            if score > best_score:
+                best_score = score
                 best_child = child
         
         return best_child
     
-    def expand(self) -> MCTSNode:
+    def expand(self) -> 'MCTSNode':
         """
-        Expand the node by trying an untried action.
+        Expand node by adding a new child.
         
         Returns:
-            The newly created child node
+            Newly created child node
         """
-        if self.is_terminal:
-            raise ValueError("Cannot expand terminal node")
-        
-        untried = self.get_untried_actions()
-        if not untried:
+        if not self.untried_actions:
             raise ValueError("No untried actions to expand")
         
-        # Select a random untried action
-        # Could use domain knowledge here to prioritize certain actions
-        action = untried.pop()
+        # Take first untried action
+        action = self.untried_actions.pop(0)
         
         # Create new state by applying action
         new_state = self.state.copy()
         new_state.place_cards(action.placements, action.discard)
         
         # Create child node
-        child = MCTSNode(new_state, parent=self, action=action)
+        child = MCTSNode(new_state, parent=self, parent_action=action)
         self.children[action] = child
         
         return child
@@ -441,7 +429,7 @@ class MCTSNode:
         Update node statistics with backpropagation.
         
         Args:
-            reward: Reward to backpropagate
+            reward: Reward from simulation
         """
         self.visit_count += 1
         self.total_reward += reward
@@ -469,6 +457,20 @@ class MCTSNode:
                 best_action = action
         
         return best_action
+    
+    def get_action_win_rate(self, action: Action) -> float:
+        """
+        Get win rate for a specific action.
+        
+        Args:
+            action: Action to get win rate for
+            
+        Returns:
+            Win rate (average reward) for the action
+        """
+        if action in self.children:
+            return self.children[action].average_reward
+        return 0.0
     
     def get_action_statistics(self) -> List[Tuple[Action, int, float]]:
         """

@@ -145,6 +145,24 @@ class GameState:
         """Check if game is complete."""
         return self._current_street == Street.COMPLETE
     
+    def get_valid_placements(self) -> List[Tuple[str, int]]:
+        """Get valid placement positions."""
+        positions = []
+        
+        # Check front (3 cards max)
+        for i in range(3):
+            if self._player_arrangement.front[i] is None:
+                positions.append(('front', i))
+        
+        # Check middle and back (5 cards max)
+        for position in ['middle', 'back']:
+            row = getattr(self._player_arrangement, position)
+            for i in range(5):
+                if row[i] is None:
+                    positions.append((position, i))
+        
+        return positions
+    
     def deal_street(self) -> List[Card]:
         """
         Deal cards for the current street with validation.
@@ -279,12 +297,11 @@ class GameState:
             placed_cards.append(discard)
         
         for card in placed_cards:
-            validated_card = validate_card(card)
-            if validated_card not in self._current_hand:
+            if card not in self._current_hand:
                 raise GameRuleViolationError(
-                    f"Card {validated_card} is not in current hand",
+                    f"Card {card} is not in current hand",
                     rule_violated="card_not_in_hand",
-                    card=str(validated_card),
+                    card=str(card),
                     hand=[str(c) for c in self._current_hand]
                 )
         
@@ -308,7 +325,7 @@ class GameState:
         
         # Validate each placement
         for card, position, index in placements:
-            validate_placement(position, index, self._player_arrangement)
+            self._validate_placement(position, index)
         
         # Apply placements
         try:
@@ -353,6 +370,43 @@ class GameState:
                 f"Failed to apply placements: {e}",
                 rule_violated="placement_error",
                 error=str(e)
+            )
+    
+    def _validate_placement(self, position: str, index: int) -> None:
+        """Validate a single placement."""
+        if position not in ['front', 'middle', 'back']:
+            raise invalid_placement_error(
+                f"Invalid position: {position}",
+                position=position,
+                valid_positions=['front', 'middle', 'back']
+            )
+        
+        # Check index bounds
+        if position == 'front':
+            if index < 0 or index >= 3:
+                raise invalid_placement_error(
+                    f"Invalid index {index} for front position",
+                    position=position,
+                    index=index,
+                    valid_range="0-2"
+                )
+        else:
+            if index < 0 or index >= 5:
+                raise invalid_placement_error(
+                    f"Invalid index {index} for {position} position",
+                    position=position,
+                    index=index,
+                    valid_range="0-4"
+                )
+        
+        # Check if position is empty
+        row = getattr(self._player_arrangement, position)
+        if row[index] is not None:
+            raise invalid_placement_error(
+                f"Position {position}[{index}] is already occupied",
+                position=position,
+                index=index,
+                current_card=str(row[index])
             )
     
     def copy(self) -> 'GameState':
@@ -456,7 +510,7 @@ class GameState:
             
             # Restore current hand
             if 'current_hand' in data:
-                state._current_hand = validate_card_list(data['current_hand'])
+                state._current_hand = [Card.from_string(c) for c in data['current_hand']]
             
             return state
             

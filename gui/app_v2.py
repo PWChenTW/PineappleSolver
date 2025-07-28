@@ -354,14 +354,34 @@ def main():
             result = st.session_state['last_result']
             
             st.subheader("最佳放置策略")
-            move = result['move']
-            if not move['is_fold']:
-                for placement in move['card_placements']:
-                    card = placement['card']
-                    hand = placement['hand']
-                    card_html = display_card(card['rank'], card['suit'], "large")
-                    hand_name = {'top': '前墩', 'middle': '中墩', 'bottom': '後墩'}[hand]
-                    st.markdown(f"{card_html} → **{hand_name}**", unsafe_allow_html=True)
+            # 檢查響應格式
+            if 'detail' in result:
+                st.error(f"API 錯誤: {result['detail']}")
+                return
+                
+            move = result.get('best_move') or result.get('move')
+            if not move:
+                st.error("無法獲取求解結果")
+                return
+                
+            if not move.get('is_fold', False):
+                placements = move.get('card_placements', [])
+                if placements:
+                    for placement in placements:
+                        card = placement['card']
+                        hand = placement['hand']
+                        card_html = display_card(card['rank'], card['suit'], "large")
+                        hand_name = {'top': '前墩', 'middle': '中墩', 'bottom': '後墩'}[hand]
+                        st.markdown(f"{card_html} → **{hand_name}**", unsafe_allow_html=True)
+                else:
+                    # 如果沒有 card_placements，嘗試顯示 best_placement
+                    if 'best_placement' in result:
+                        st.write("擺放建議：")
+                        for card_str, position in result['best_placement'].items():
+                            pos_name = {'front': '前墩', 'middle': '中墩', 'back': '後墩'}[position]
+                            st.markdown(f"**{card_str}** → **{pos_name}**")
+                    else:
+                        st.warning("無法獲取具體的擺放建議")
             else:
                 st.warning("建議棄牌")
             
@@ -371,11 +391,18 @@ def main():
             st.subheader("評估信息")
             col_a, col_b = st.columns(2)
             with col_a:
-                st.metric("期望分數", f"{result['evaluation']:.2f}")
-                st.metric("置信度", f"{result['confidence']:.2%}")
+                st.metric("期望分數", f"{result.get('evaluation', 0):.2f}")
+                st.metric("置信度", f"{result.get('confidence', 0):.2%}")
             with col_b:
-                st.metric("計算時間", f"{result['computation_time_seconds']:.2f}秒")
-                st.metric("模擬次數", f"{result.get('simulations', 0):,}")
+                # 兼容不同的字段名
+                comp_time = result.get('computation_time_seconds') or result.get('computation_time', 0)
+                st.metric("計算時間", f"{comp_time:.2f}秒")
+                
+                # 嘗試從 statistics 中獲取模擬次數
+                simulations = result.get('simulations', 0)
+                if simulations == 0 and 'statistics' in result:
+                    simulations = result['statistics'].get('total_iterations', 0)
+                st.metric("模擬次數", f"{simulations:,}")
             
             # 統計信息
             if 'expected_score' in result:
