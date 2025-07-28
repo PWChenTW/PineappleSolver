@@ -1,0 +1,33 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'ofc-solver'
+
+scrape_configs:
+  # OFC Solver API metrics
+  - job_name: 'ofc-solver'
+    static_configs:
+      - targets: ['ofc-solver:8000']
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+    
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    
+  # Redis exporter (optional)
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+
+# Alerting rules
+rule_files:
+  - 'alerts/*.yml'
+
+# Alertmanager configuration (optional)
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []

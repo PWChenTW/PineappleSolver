@@ -1,0 +1,171 @@
+groups:
+  - name: ofc_solver_alerts
+    interval: 30s
+    rules:
+      # API Performance Alerts
+      - alert: HighAPILatency
+        expr: histogram_quantile(0.95, sum(rate(ofc_api_request_duration_seconds_bucket[5m])) by (le)) > 1
+        for: 5m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "High API latency detected"
+          description: "API P95 latency is {{ $value }}s (threshold: 1s)"
+      
+      - alert: VeryHighAPILatency
+        expr: histogram_quantile(0.99, sum(rate(ofc_api_request_duration_seconds_bucket[5m])) by (le)) > 5
+        for: 2m
+        labels:
+          severity: critical
+          component: api
+        annotations:
+          summary: "Very high API latency detected"
+          description: "API P99 latency is {{ $value }}s (threshold: 5s)"
+      
+      # Error Rate Alerts
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(ofc_api_requests_total{status=~"5.."}[5m]))
+            /
+            sum(rate(ofc_api_requests_total[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value | humanizePercentage }} (threshold: 5%)"
+      
+      - alert: CriticalErrorRate
+        expr: |
+          (
+            sum(rate(ofc_api_requests_total{status=~"5.."}[5m]))
+            /
+            sum(rate(ofc_api_requests_total[5m]))
+          ) > 0.1
+        for: 2m
+        labels:
+          severity: critical
+          component: api
+        annotations:
+          summary: "Critical error rate detected"
+          description: "Error rate is {{ $value | humanizePercentage }} (threshold: 10%)"
+      
+      # Solver Performance Alerts
+      - alert: LowSimulationRate
+        expr: ofc_solver_simulation_rate < 1000 and ofc_solver_simulation_rate > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: solver
+        annotations:
+          summary: "Low MCTS simulation rate"
+          description: "Simulation rate is {{ $value }}/s (threshold: 1000/s)"
+      
+      - alert: SolverTimeout
+        expr: histogram_quantile(0.95, sum(rate(ofc_solver_solve_duration_seconds_bucket[5m])) by (le)) > 60
+        for: 5m
+        labels:
+          severity: warning
+          component: solver
+        annotations:
+          summary: "Solver taking too long"
+          description: "P95 solve time is {{ $value }}s (threshold: 60s)"
+      
+      # System Resource Alerts
+      - alert: HighCPUUsage
+        expr: ofc_system_cpu_usage_percent > 80
+        for: 5m
+        labels:
+          severity: warning
+          component: system
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is {{ $value }}% (threshold: 80%)"
+      
+      - alert: CriticalCPUUsage
+        expr: ofc_system_cpu_usage_percent > 95
+        for: 2m
+        labels:
+          severity: critical
+          component: system
+        annotations:
+          summary: "Critical CPU usage"
+          description: "CPU usage is {{ $value }}% (threshold: 95%)"
+      
+      - alert: HighMemoryUsage
+        expr: ofc_system_memory_usage_bytes{type="rss"} > 2147483648  # 2GB
+        for: 5m
+        labels:
+          severity: warning
+          component: system
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is {{ $value | humanize1024 }}B (threshold: 2GB)"
+      
+      - alert: CriticalMemoryUsage
+        expr: ofc_system_memory_usage_bytes{type="rss"} > 4294967296  # 4GB
+        for: 2m
+        labels:
+          severity: critical
+          component: system
+        annotations:
+          summary: "Critical memory usage"
+          description: "Memory usage is {{ $value | humanize1024 }}B (threshold: 4GB)"
+      
+      # Queue Alerts
+      - alert: AsyncQueueBacklog
+        expr: ofc_async_queue_size > 100
+        for: 5m
+        labels:
+          severity: warning
+          component: queue
+        annotations:
+          summary: "Async queue backlog"
+          description: "Queue size is {{ $value }} (threshold: 100)"
+      
+      - alert: AsyncQueueFull
+        expr: ofc_async_queue_size > 900
+        for: 2m
+        labels:
+          severity: critical
+          component: queue
+        annotations:
+          summary: "Async queue almost full"
+          description: "Queue size is {{ $value }} (max: 1000)"
+      
+      # Rate Limiting Alerts
+      - alert: HighRateLimitExceeded
+        expr: sum(rate(ofc_rate_limit_exceeded_total[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "High rate of rate limit violations"
+          description: "Rate limit exceeded {{ $value }}/s"
+      
+      # Thread Utilization Alerts
+      - alert: LowThreadUtilization
+        expr: avg(ofc_mcts_thread_utilization) < 50 and count(ofc_mcts_thread_utilization) > 1
+        for: 5m
+        labels:
+          severity: warning
+          component: solver
+        annotations:
+          summary: "Low MCTS thread utilization"
+          description: "Average thread utilization is {{ $value }}% (threshold: 50%)"
+      
+      # Solver Quality Alerts
+      - alert: LowSolverConfidence
+        expr: histogram_quantile(0.5, sum(rate(ofc_solver_confidence_bucket[5m])) by (le)) < 0.5
+        for: 10m
+        labels:
+          severity: warning
+          component: solver
+        annotations:
+          summary: "Low solver confidence"
+          description: "Median confidence is {{ $value }} (threshold: 0.5)"
